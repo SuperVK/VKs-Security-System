@@ -27,10 +27,10 @@ for file in files:
     image = face_recognition.load_image_file("models/" + file)
     face_encodings = face_recognition.face_encodings(image)
     if len(face_encodings) == 0:
-        print(f'Found no person in {file}')
+        print('Found no person in {0}'.format(file))
         continue
     if len(face_encodings) >= 2:
-        print(f'Found multiple people in {file}, only took the first one!')
+        print('Found multiple people in {0}, only took the first one!'.format(file))
     known_face_encodings.append(face_encodings[0])
     known_face_names.append(file.split('.')[0])
 
