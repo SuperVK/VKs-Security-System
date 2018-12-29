@@ -1,12 +1,11 @@
 import face_recognition
 import cv2
-# Python 3 server example
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
 import datetime
 from configparser import ConfigParser
 import requests
 import os
+import sys
 
 #conf file needs a sections, but I don't want
 conf_file = ConfigParser()
@@ -15,8 +14,6 @@ config = conf_file['Config']
 
 video_capture = cv2.VideoCapture(0)
 
-hostName = "localhost"
-serverPort = 8073
 
 files = os.listdir(config['models'])
 
@@ -34,34 +31,28 @@ for file in files:
     known_face_encodings.append(face_encodings[0])
     known_face_names.append(file.split('.')[0])
 
-print(known_face_names)
 
-class MyServer(BaseHTTPRequestHandler):
-    def do_GET(self):
-        face_found = False
-    
+try:
+    while True:
+        #30 frames a second
+        print(1/int(config['frame_rate']))
+        time.sleep(1/int(config['frame_rate']))
+
         unknown_encoding = None
+        ret, frame = video_capture.read()
+        if not ret:
+            print('It seems like your camera is not connected correctly! Connect it, and restart.')
+            sys.exit()
+        # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
+        rgb_frame = frame[:, :, ::-1]
 
-        while not face_found:
-            time.sleep(0.5)
-            # Grab a single frame of video
-            ret, frame = video_capture.read()
-            if not ret:
-                print('It seems like your camera is not connected correctly! Connect it, and restart.')
-                return              
-            # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
-            rgb_frame = frame[:, :, ::-1]
+        # Find all the faces and face enqcodings in the frame of video
+        face_locations = face_recognition.face_locations(rgb_frame)
+        if len(face_locations) > 0:
+            unknown_encoding = face_recognition.face_encodings(rgb_frame)[0]
+        else:
+            continue
 
-            # Find all the faces and face enqcodings in the frame of video
-            face_locations = face_recognition.face_locations(rgb_frame)
-            if len(face_locations) > 0:
-                unknown_encoding = face_recognition.face_encodings(rgb_frame)[0]
-                face_found = True
-
-        ts = time.time()
-        st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
-        if config['picture_logs'] != 'None':
-            cv2.imwrite(config['picture_logs'] + st + '.jpeg', frame)
 
         results = face_recognition.compare_faces(known_face_encodings, unknown_encoding)
 
@@ -71,29 +62,23 @@ class MyServer(BaseHTTPRequestHandler):
             if isPerson:
                 found_person = known_face_names[i]
 
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        self.wfile.write(bytes(found_person, "utf-8"))
+        ts = time.time()
+        st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
+        if config['picture_logs'] != 'None':
+            cv2.imwrite(config['picture_logs'] + st + '_' + found_person +'.jpeg', frame)
+
         if config['webhook_link'] != 'None':
             requests.post(config['webhook_link'], data={"content": "{0} has been spotted!".format(found_person)})
         
-
-
-
-
-       
-webServer = HTTPServer((hostName, serverPort), MyServer)
-
-print("Server started http://%s:%s" % (hostName, serverPort))
-try:    
-    webServer.serve_forever()
-    
+        time.sleep(int(config['timeout']))
 except KeyboardInterrupt:
-    pass
+    print('Script stopped')
+    video_capture.release()
 
-webServer.server_close()
-print("Server stopped.")
+
+
+        
+
 
 
 
